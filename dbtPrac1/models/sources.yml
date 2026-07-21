@@ -1,0 +1,14 @@
+version: 2
+
+sources:
+  - name: default
+    schema: default
+    tables:
+      - name: employee_source
+      - name: ipl_raw
+      - name: ipl_raw2
+      - name: orders3
+      - name: customers
+      - name: products
+      - name: returns
+    

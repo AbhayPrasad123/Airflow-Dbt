@@ -1,0 +1,27 @@
+# Virtual Environment
+dbt-env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Airflow
+Airflow/logs/
+airflow.db
+
+# dbt
+logs/
+target/
+dbt_packages/
+
+# VS Code
+.vscode/
+
+# Environment Variables
+.env
+Airflow/.env
+
+dbtPrac1/target/
+dbtPrac1/logs/
+dbtPrac1/dbt_packages/

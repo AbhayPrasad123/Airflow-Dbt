@@ -1,0 +1,13 @@
+version: 2
+
+models:
+  - name: employee_attendance_gold
+
+    columns:
+      - name: attendance_status
+        tests:
+          - accepted_values:
+              values:
+                - PRESENT
+                - HALF DAY
+                - ABSENT

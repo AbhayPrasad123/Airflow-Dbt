@@ -1,0 +1,23 @@
+version: 2
+
+models:
+  - name: attendance_silver
+
+    columns:
+      - name: employee_id
+        tests:
+          - not_null
+
+      - name: work_date
+        tests:
+          - not_null
+
+      - name: total_hours
+        tests:
+          - not_null
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - employee_id
+            - work_date

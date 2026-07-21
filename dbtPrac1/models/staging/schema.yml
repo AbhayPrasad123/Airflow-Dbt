@@ -1,0 +1,57 @@
+version: 2
+
+models:
+  - name: stg_employee
+    description: "Staging model for employee data"
+
+    columns:
+      - name: id
+        description: "Primary key of employee"
+        data_tests:
+          - not_null
+          - unique
+
+      - name: name
+        data_tests:
+          - not_null
+
+      - name: age
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [18, 19, 20, 21, 22, 23, 24, 25]
+
+      - name: org
+        data_tests:
+          - not_null
+      
+      - name: effective_date
+        description: "Date when record became active"
+        data_tests:
+          - not_null
+
+
+
+  - name: stg_ipl_stats
+    description: "Staging model for IPL player statistics"
+
+    columns:
+      - name: year
+        data_tests:
+          - not_null
+
+      - name: playername
+        data_tests:
+          - not_null
+
+  - name: stg_ipl_json
+    description: "Staging model for IPL player statistics"
+
+    columns:
+      - name: year
+        data_tests:
+          - not_null
+
+      - name: playername
+        data_tests:
+          - not_null

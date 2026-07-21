@@ -1,0 +1,49 @@
+version: 2
+
+models:
+  - name: ipl_csv_json_join
+    description: "Joined dataset combining CSV IPL batting stats with JSON strike rate data."
+    
+    data_tests:
+      - no_negative:
+          column_name: runs_scored
+    columns:
+
+      - name: playername
+        description: "Name of the player"
+        data_tests:
+          - not_null
+
+      - name: year
+        description: "Season year of IPL"
+        data_tests:
+          - not_null
+
+      - name: runs_scored
+        description: "Total runs scored in the season"
+       
+
+      - name: century
+        description: "Number of centuries scored in the season"
+        data_tests:
+          - not_null
+
+      - name: batting_avg
+        description: "Batting average of the player"
+        data_tests:
+          - not_null
+
+      - name: matches_battled
+        description: "Number of matches batted by player"
+        data_tests:
+          - not_null
+
+      - name: strikerate
+        description: "Batting strike rate of player"
+        data_tests:
+          - not_null
+
+      - name: load_timestamp
+        description: "Timestamp when the record was ingested"
+        data_tests:
+          - not_null

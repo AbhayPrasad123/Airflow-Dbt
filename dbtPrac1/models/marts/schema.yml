@@ -1,0 +1,28 @@
+version: 2
+
+models:
+
+  - name: fct_order_items
+    columns:
+
+      - name: order_year
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_unique
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 2023
+              max_value: 2027
+      - name: order_id
+        data_tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_unique
+          
+      - name: product_id
+        data_tests:
+          - not_null
+          
+
+      - name: customer_id
+        data_tests:
+          - not_null
+         

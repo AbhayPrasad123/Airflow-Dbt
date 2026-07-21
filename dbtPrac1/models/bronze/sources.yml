@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: workspace
+    schema: bronze
+
+    tables:
+      - name: attendance_logs_raw
+
+      - name: holidays_raw
