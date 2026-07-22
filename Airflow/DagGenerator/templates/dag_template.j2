@@ -13,6 +13,6 @@ with DAG(
     hello = BashOperator(
         task_id="hello",
         bash_command="""
-        echo "Hello from {{ dag_name }}"
+        echo "Hello guys from {{ dag_name }}"
         """
     )
