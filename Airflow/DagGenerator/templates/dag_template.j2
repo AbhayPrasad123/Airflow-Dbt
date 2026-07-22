@@ -1,0 +1,18 @@
+from airflow import DAG
+from airflow.providers.standard.operators.bash import BashOperator
+from datetime import datetime
+
+with DAG(
+    dag_id="{{ dag_name }}",
+    start_date=datetime(2026,7,16),
+    schedule=None,
+    catchup=False,
+    tags=["generated"],
+) as dag:
+
+    hello = BashOperator(
+        task_id="hello",
+        bash_command="""
+        echo "Hello from {{ dag_name }}"
+        """
+    )

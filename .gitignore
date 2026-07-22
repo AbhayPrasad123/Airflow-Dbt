@@ -25,3 +25,5 @@ Airflow/.env
 dbtPrac1/target/
 dbtPrac1/logs/
 dbtPrac1/dbt_packages/
+
+Airflow/dags/generated/
