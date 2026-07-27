@@ -35,3 +35,6 @@ print("=" * 40)
 print(f"DAG Created : {dag_name}")
 print(f"Saved at : {output_file}")
 print("=" * 40)
+
+
+# python create_dag.py employee_pipeline
