@@ -46,3 +46,7 @@ with DAG(
     )
 
     dbt_debug >> dbt_build >> trigger_dag2
+
+    # docker exec -it airflow-airflow-scheduler-1 bash
+#      airflow dags trigger dbt_Chain_1 \
+# --conf '{"model_name":"employee_scd2","dag2":"dbt_Chain_2","dag3":"dbt_Chain_3"}'
