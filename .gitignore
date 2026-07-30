@@ -27,3 +27,6 @@ dbtPrac1/logs/
 dbtPrac1/dbt_packages/
 
 Airflow/dags/generated/
+Airflow/dags/__pycache__/
+Airflow/dist/
+Airflow/dag_generator.egg-info/
