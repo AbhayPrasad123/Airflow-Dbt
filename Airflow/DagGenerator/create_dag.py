@@ -3,7 +3,6 @@ import sys
 
 from jinja2 import Environment, FileSystemLoader
 
-
 dag_name = sys.argv[1]
 
 
