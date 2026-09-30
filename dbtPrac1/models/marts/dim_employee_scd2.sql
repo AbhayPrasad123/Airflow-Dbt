@@ -83,7 +83,6 @@ filtered AS (
 ),
 
 final AS (
-
     SELECT
         id,
         name,
