@@ -1,88 +1,69 @@
-from pyspark.sql import functions as F
-from pyspark.sql.window import Window
+%sql
 
-source_table = "workspace.bronze.employee_source"
-target_table = "workspace.default_gold.employee_scd2"
+CREATE OR REPLACE TEMP VIEW employee_scd2_rebuilt AS
+WITH combined AS (
+    SELECT employee_id, employee_name, department, salary, city,
+           start_date AS effective_date
+    FROM workspace.default_gold.employee_scd2
 
-# 1. combined
-history = spark.table(target_table).select(
-    "employee_id",
-    "employee_name",
-    "department",
-    "salary",
-    "city",
-    F.col("start_date").alias("effective_date")
-)
+    UNION ALL
 
-source = spark.table(source_table).select(
-    "employee_id",
-    "employee_name",
-    "department",
-    "salary",
-    "city",
-    F.to_date("updated_at").alias("effective_date")
-)
-
-combined = history.unionByName(source)
-
-# 2. hashed
-hashed = combined.withColumn(
-    "row_hash",
-    F.md5(
-        F.concat_ws(
-            "|",
-            F.coalesce(F.col("employee_name"), F.lit("")),
-            F.coalesce(F.col("department"), F.lit("")),
-            F.coalesce(F.col("salary").cast("string"), F.lit("")),
-            F.coalesce(F.col("city"), F.lit(""))
-        )
+    SELECT employee_id, employee_name, department, salary, city,
+           TO_DATE(updated_at) AS effective_date
+    FROM workspace.bronze.employee_source
+),
+deduplicated AS (
+    SELECT *
+    FROM (
+        SELECT *,
+               ROW_NUMBER() OVER (
+                   PARTITION BY employee_id, effective_date
+                   ORDER BY effective_date DESC
+               ) AS rn
+        FROM combined
     )
+    WHERE rn = 1
+),
+hashed AS (
+    SELECT *,
+           MD5(CONCAT_WS('|',
+               COALESCE(employee_name, ''),
+               COALESCE(department, ''),
+               COALESCE(CAST(salary AS STRING), ''),
+               COALESCE(city, '')
+           )) AS row_hash
+    FROM deduplicated
+),
+lagged AS (
+    SELECT *,
+           LAG(row_hash) OVER (
+               PARTITION BY employee_id
+               ORDER BY effective_date
+           ) AS prev_hash
+    FROM hashed
+),
+filtered AS (
+    SELECT *
+    FROM lagged
+    WHERE prev_hash IS NULL OR row_hash <> prev_hash
+),
+versioned AS (
+    SELECT employee_id, employee_name, department, salary, city,
+           effective_date AS start_date,
+           DATE_SUB(
+               LEAD(effective_date) OVER (
+                   PARTITION BY employee_id
+                   ORDER BY effective_date
+               ), 1
+           ) AS end_date
+    FROM filtered
 )
+SELECT employee_id, employee_name, department, salary, city, start_date,
+       COALESCE(end_date, DATE('9999-12-31')) AS end_date,
+       CASE WHEN end_date IS NULL THEN TRUE ELSE FALSE END AS is_current
+FROM versioned;
 
-# 3. lagged
-w = Window.partitionBy("employee_id").orderBy("effective_date")
-
-lagged = hashed.withColumn(
-    "prev_hash",
-    F.lag("row_hash").over(w)
-)
-
-# 4. filtered
-filtered = lagged.filter(
-    F.col("prev_hash").isNull()
-    | (F.col("row_hash") != F.col("prev_hash"))
-)
-
-# 5. versioned
-versioned = (
-    filtered
-    .withColumn(
-        "start_date",
-        F.col("effective_date")
-    )
-    .withColumn(
-        "next_date",
-        F.lead("effective_date").over(w)
-    )
-    .withColumn(
-        "end_date",
-        F.date_sub(F.col("next_date"), 1)
-    )
-)
-
-# 6. final SELECT — same output columns as SQL
-rebuilt_df = versioned.select(
-    "employee_id",
-    "employee_name",
-    "department",
-    "salary",
-    "city",
-    "start_date",
-    F.coalesce(
-        F.col("end_date"),
-        F.to_date(F.lit("9999-12-31"))
-    ).alias("end_date"),
-    F.col("next_date").isNull().alias("is_current")
-)
-
-display(rebuilt_df.orderBy("employee_id", "start_date"))
+-- Check the result before writing it to the target
+SELECT *
+FROM employee_scd2_rebuilt
+ORDER BY employee_id, start_date;

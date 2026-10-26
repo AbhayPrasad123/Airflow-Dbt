@@ -5,14 +5,9 @@ source_table = "workspace.bronze.employee_source"
 target_table = "workspace.default_gold.employee_scd2"
 
 src = spark.table(source_table).alias("src")
+tgt = spark.table(target_table).alias("tgt")
 
-tgt = (
-    spark.table(target_table)
-    .filter(F.col("is_current") == True)
-    .alias("tgt")
-)
-
-# Compare source and current target attributes
+# Same comparison as SQL: NOT (all columns are equal)
 same_values = (
     F.col("src.employee_name").eqNullSafe(F.col("tgt.employee_name"))
     & F.col("src.department").eqNullSafe(F.col("tgt.department"))
@@ -22,10 +17,10 @@ same_values = (
 
 changed = ~same_values
 
-# 1. New employees and new versions of changed employees
+# 1. INSERT new employees and changed employee versions
 new_versions = (
     src.join(
-        tgt,
+        tgt.filter(F.col("tgt.is_current") == True),
         F.col("src.employee_id") == F.col("tgt.employee_id"),
         "left"
     )
@@ -45,10 +40,10 @@ new_versions = (
     )
 )
 
-# 2. Old current versions that need to expire
+# 2. EXPIRE the previous current version
 old_versions = (
     src.join(
-        tgt,
+        tgt.filter(F.col("tgt.is_current") == True),
         F.col("src.employee_id") == F.col("tgt.employee_id"),
         "inner"
     )
@@ -68,14 +63,14 @@ old_versions = (
     )
 )
 
-# Combine insert and expire actions
+# Same as UNION ALL in SQL
 staged = new_versions.unionByName(old_versions)
 
-# Apply changes to Delta target
-target = DeltaTable.forName(spark, target_table)
+# Same as MERGE INTO target
+delta_target = DeltaTable.forName(spark, target_table)
 
 (
-    target.alias("target")
+    delta_target.alias("target")
     .merge(
         staged.alias("staged"),
         """
@@ -83,24 +78,20 @@ target = DeltaTable.forName(spark, target_table)
         AND target.is_current = true
         """
     )
-    .whenMatchedUpdate(
-        set={
-            "end_date": "staged.end_date",
-            "is_current": "staged.is_current"
-        }
-    )
-    .whenNotMatchedInsert(
-        values={
-            "employee_id": "staged.employee_id",
-            "employee_name": "staged.employee_name",
-            "department": "staged.department",
-            "salary": "staged.salary",
-            "city": "staged.city",
-            "start_date": "staged.start_date",
-            "end_date": "staged.end_date",
-            "is_current": "staged.is_current"
-        }
-    )
+    .whenMatchedUpdate(set={
+        "end_date": "staged.end_date",
+        "is_current": "staged.is_current"
+    })
+    .whenNotMatchedInsert(values={
+        "employee_id": "staged.employee_id",
+        "employee_name": "staged.employee_name",
+        "department": "staged.department",
+        "salary": "staged.salary",
+        "city": "staged.city",
+        "start_date": "staged.start_date",
+        "end_date": "staged.end_date",
+        "is_current": "staged.is_current"
+    })
     .execute()
 )
 
