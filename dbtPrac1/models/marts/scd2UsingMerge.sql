@@ -1,101 +1,69 @@
-from pyspark.sql import functions as F
-from delta.tables import DeltaTable
+%sql
 
-source_table = "workspace.bronze.employee_source"
-target_table = "workspace.default_gold.employee_scd2"
+MERGE INTO workspace.default_gold.employee_scd2 AS target
+USING (
+    -- New employee or changed version: insert this row
+    SELECT
+        CAST(NULL AS INT) AS merge_key,
+        src.employee_id,
+        src.employee_name,
+        src.department,
+        src.salary,
+        src.city,
+        TO_DATE(src.updated_at) AS start_date,
+        DATE('9999-12-31') AS end_date,
+        TRUE AS is_current
+    FROM workspace.bronze.employee_source AS src
+    LEFT JOIN workspace.default_gold.employee_scd2 AS tgt
+        ON src.employee_id = tgt.employee_id
+       AND tgt.is_current = TRUE
+    WHERE tgt.employee_id IS NULL
+       OR NOT (
+            src.employee_name <=> tgt.employee_name
+        AND src.department    <=> tgt.department
+        AND src.salary        <=> tgt.salary
+        AND src.city          <=> tgt.city
+       )
 
-src = spark.table(source_table).alias("src")
-tgt = spark.table(target_table).alias("tgt")
+    UNION ALL
 
-# Same comparison as SQL: NOT (all columns are equal)
-same_values = (
-    F.col("src.employee_name").eqNullSafe(F.col("tgt.employee_name"))
-    & F.col("src.department").eqNullSafe(F.col("tgt.department"))
-    & F.col("src.salary").eqNullSafe(F.col("tgt.salary"))
-    & F.col("src.city").eqNullSafe(F.col("tgt.city"))
-)
+    -- Changed employee: expire the old current version
+    SELECT
+        src.employee_id AS merge_key,
+        tgt.employee_id,
+        tgt.employee_name,
+        tgt.department,
+        tgt.salary,
+        tgt.city,
+        tgt.start_date,
+        DATE_SUB(TO_DATE(src.updated_at), 1) AS end_date,
+        FALSE AS is_current
+    FROM workspace.bronze.employee_source AS src
+    INNER JOIN workspace.default_gold.employee_scd2 AS tgt
+        ON src.employee_id = tgt.employee_id
+       AND tgt.is_current = TRUE
+    WHERE NOT (
+            src.employee_name <=> tgt.employee_name
+        AND src.department    <=> tgt.department
+        AND src.salary        <=> tgt.salary
+        AND src.city          <=> tgt.city
+       )
+) AS staged
+ON target.employee_id = staged.merge_key
+AND target.is_current = TRUE
 
-changed = ~same_values
+WHEN MATCHED THEN
+    UPDATE SET
+        target.end_date = staged.end_date,
+        target.is_current = FALSE
 
-# 1. INSERT new employees and changed employee versions
-new_versions = (
-    src.join(
-        tgt.filter(F.col("tgt.is_current") == True),
-        F.col("src.employee_id") == F.col("tgt.employee_id"),
-        "left"
+WHEN NOT MATCHED THEN
+    INSERT (
+        employee_id, employee_name, department, salary, city,
+        start_date, end_date, is_current
     )
-    .filter(
-        F.col("tgt.employee_id").isNull() | changed
-    )
-    .select(
-        F.lit(None).cast("int").alias("merge_key"),
-        F.col("src.employee_id").alias("employee_id"),
-        F.col("src.employee_name").alias("employee_name"),
-        F.col("src.department").alias("department"),
-        F.col("src.salary").alias("salary"),
-        F.col("src.city").alias("city"),
-        F.to_date("src.updated_at").alias("start_date"),
-        F.to_date(F.lit("9999-12-31")).alias("end_date"),
-        F.lit(True).alias("is_current")
-    )
-)
-
-# 2. EXPIRE the previous current version
-old_versions = (
-    src.join(
-        tgt.filter(F.col("tgt.is_current") == True),
-        F.col("src.employee_id") == F.col("tgt.employee_id"),
-        "inner"
-    )
-    .filter(changed)
-    .select(
-        F.col("src.employee_id").alias("merge_key"),
-        F.col("tgt.employee_id").alias("employee_id"),
-        F.col("tgt.employee_name").alias("employee_name"),
-        F.col("tgt.department").alias("department"),
-        F.col("tgt.salary").alias("salary"),
-        F.col("tgt.city").alias("city"),
-        F.col("tgt.start_date").alias("start_date"),
-        F.date_sub(
-            F.to_date("src.updated_at"), 1
-        ).alias("end_date"),
-        F.lit(False).alias("is_current")
-    )
-)
-
-# Same as UNION ALL in SQL
-staged = new_versions.unionByName(old_versions)
-
-# Same as MERGE INTO target
-delta_target = DeltaTable.forName(spark, target_table)
-
-(
-    delta_target.alias("target")
-    .merge(
-        staged.alias("staged"),
-        """
-        target.employee_id = staged.merge_key
-        AND target.is_current = true
-        """
-    )
-    .whenMatchedUpdate(set={
-        "end_date": "staged.end_date",
-        "is_current": "staged.is_current"
-    })
-    .whenNotMatchedInsert(values={
-        "employee_id": "staged.employee_id",
-        "employee_name": "staged.employee_name",
-        "department": "staged.department",
-        "salary": "staged.salary",
-        "city": "staged.city",
-        "start_date": "staged.start_date",
-        "end_date": "staged.end_date",
-        "is_current": "staged.is_current"
-    })
-    .execute()
-)
-
-display(
-    spark.table(target_table)
-    .orderBy("employee_id", "start_date")
-)
+    VALUES (
+        staged.employee_id, staged.employee_name, staged.department,
+        staged.salary, staged.city, staged.start_date, staged.end_date,
+        staged.is_current
+    );
